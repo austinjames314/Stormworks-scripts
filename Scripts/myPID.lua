@@ -13,7 +13,8 @@ function onTick()
 	setPoint = input.getNumber(1)
 	procVar = input.getNumber(2)
 	
-	--if the channel 3 bool is true, then take the PID congfig values from the composite input in real time (good for tuning the PID controller). Otherwise we just need to adjust the gains 
+	--if the channel 3 bool is true, then take the PID congfig values from the composite input in real time (good for tuning the PID controller).
+	--Otherwise we just need to adjust the gains each tick, depending on the setpoint (better stability with very wide setpoint ranges).
 	if input.getBool(3) then
 		Kp = input.getNumber(2) / setPoint
 		Ki = input.getNumber(3) / setPoint
