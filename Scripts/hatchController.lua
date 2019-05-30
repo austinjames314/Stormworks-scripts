@@ -18,7 +18,7 @@ function onTick()
 	open = input.getNumber(1)
 	close = input.getNumber(2)
 	
-	if open != close then
+	if open ~= close then
 		if open == 1 then
 			State = 1
 		else if close == 1 then
@@ -27,11 +27,11 @@ function onTick()
 	end
 
 	-- If State is 0, then close the hatch
-	if State = 0 then
+	if State == 0 then
 		output.setNumber(HingeChannel, HatchClosed)
 		output.setNumber(LockChannel, Locked)
 
-	else
+	end else
 		-- we're opening so unlock and open
 		output.setNumber(LockChannel, Unlocked)
 		output.setNumber(HingeChannel, HatchOpen)
