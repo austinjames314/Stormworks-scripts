@@ -1,8 +1,8 @@
---- Declare Constants
+-- Declare Constants
 
---1 = open or opening. 0 = closed or closing
+-- 1 = open or opening. 0 = closed or closing
 State = 0
---State variable to track if the button was already pressed
+-- State variable to track if the button was already pressed
 ButtonPressed = false
 
 LockChannel = 1
@@ -12,11 +12,9 @@ HatchClosed = 0
 Locked = true
 Unlocked = false
 
--- Tick function that will be executed every logic tick
 function onTick()
-
-	--what are we supposed to be doing again? Set the current state depending on which buttons are pressed.
-	--If both buttons are pressed, or neither, then leave it in the current state. Otherwise change it.
+	-- If the button is pressed for the first tick since it was last pressed, then flip the state
+	-- Also record that the button is currently pressed, so it can be ignored until it's been released and then pressed again.
 	button = input.getBool(1)
 	
 	if button then
