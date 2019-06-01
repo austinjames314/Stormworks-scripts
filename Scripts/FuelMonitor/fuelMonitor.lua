@@ -3,38 +3,42 @@
 --Input channels
 SpeedChannel = 1
 FuelGuageDeltaChannel = 2
+FuelSmoothingChannel = 3
+SpeedSmoothingChannel = 4
+SmoothingLimitsChannel = 5
+
 --output channels
 ConsumptionChannel = 1
 EfficiencyChannel = 2
 
-NumSamples = 300
+TicksPerHour = 60*60*60
 
 --global variable initialisation
-fuelSum = 0
-speedSum = 0
-
+fuelSt = 0
+speedSt = 0
 Lp100km = 0
 
 function onTick()
-	currentFuelDelta = input.getNumber(FuelGuageDeltaChannel)
-	
-	fuelSum = fuelSum - (fuelSum / NumSamples)
-	fuelSum = fuelSum + currentFuelDelta
+	limit = input.getNumber(SmoothingLimitsChannel)
 
-	fuelPerSec = fuelSum / (NumSamples / -60)
-	fuelPerHour = fuelPerSec * 3600
+	currentFuelDelta = input.getNumber(FuelGuageDeltaChannel)
+	smooth = input.getNumber(FuelSmoothingChannel)
+	
+	fuelSt = currentFuelDelta * smooth + (1 - smooth) * fuelSt
+	if math.abs(fuelSt) > (limit / TicksPerHour) then
+		fuelSt = limit / TicksPerHour
+	end
+	fuelPerHour = fuelSt * (-TicksPerHour)
 	
 	output.setNumber(ConsumptionChannel, fuelPerHour)
 	
 	
 	currentSpeed = input.getNumber(SpeedChannel)
-	speedSum = speedSum - (speedSum / NumSamples)
-	speedSum = speedSum + currentSpeed
+	smooth = input.getNumber(SpeedSmoothingChannel)
 	
-	avgSpeed = speedSum / NumSamples
-	
-	if avgSpeed ~= 0 then
-		Lp100km = (100 * fuelPerHour) / avgSpeed
+	speedSt = currentSpeed * smooth + (1 - smooth) * speedSt
+	if speedSt ~= 0 then
+		Lp100km = (100 * fuelPerHour) / speedSt
 	end
 	
 	output.setNumber(EfficiencyChannel, Lp100km)
