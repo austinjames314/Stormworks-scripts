@@ -7,45 +7,31 @@ FuelGuageDeltaChannel = 2
 ConsumptionChannel = 1
 EfficiencyChannel = 2
 
-NumSamples = 1200
+NumSamples = 300
 
 --global variable initialisation
-fuelArray = {}
-fuelArrIndex = 0
-speedArray = {}
-speedArrIndex = 0
-
-for i = 0, NumSamples - 1 do
-	fuelArray[i] = 0
-	speedArray[i] = 0
-end
+fuelSum = 0
+speedSum = 0
 
 Lp100km = 0
 
 function onTick()
 	currentFuelDelta = input.getNumber(FuelGuageDeltaChannel)
-	fuelArray[fuelArrIndex] = currentFuelDelta
-	fuelArrIndex = math.fmod((fuelArrIndex + 1), NumSamples)
 	
-	arraySum = 0
-	for i = 0, NumSamples - 1 do
-		arraySum = arraySum + fuelArray[i]
-	end
-	fuelPerSec = arraySum / (NumSamples / -60)
+	fuelSum = fuelSum - (fuelSum / NumSamples)
+	fuelSum = fuelSum + currentFuelDelta
+
+	fuelPerSec = fuelSum / (NumSamples / -60)
 	fuelPerHour = fuelPerSec * 3600
 	
 	output.setNumber(ConsumptionChannel, fuelPerHour)
 	
 	
 	currentSpeed = input.getNumber(SpeedChannel)
-	speedArray[speedArrIndex] = currentSpeed
-	speedArrIndex = math.fmod((speedArrIndex + 1), NumSamples)
+	speedSum = speedSum - (speedSum / NumSamples)
+	speedSum = speedSum + currentSpeed
 	
-	arraySum = 0
-	for i = 0, NumSamples - 1 do
-		arraySum = arraySum + speedArray[i]
-	end
-	avgSpeed = arraySum / NumSamples
+	avgSpeed = speedSum / NumSamples
 	
 	if avgSpeed ~= 0 then
 		Lp100km = (100 * fuelPerHour) / avgSpeed
