@@ -21,12 +21,10 @@ I = 0
 P0 = 0
 
 function onTick()
-	--in normal use these are the only two inputs used.
 	setPoint = input.getNumber(SetPointChannel)
 	procVar = input.getNumber(ProcVarChannel)
 	
-	--if the channel 3 bool is true, then take the PID congfig values from the composite input in real time (good for tuning the PID controller).
-	--Otherwise we just need to adjust the gains each tick, depending on the setpoint (better stability with very wide setpoint ranges).
+	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external.
 	Kp = input.getNumber(KpChannel)
 	Ki = input.getNumber(KiChannel)
 	Kd = input.getNumber(KdChannel)
