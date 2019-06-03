@@ -37,17 +37,19 @@ SpdIOut = 3
 SpdIboundedOut = 4
 SpdDOut = 5
 
-RPMControlOutput = 7
-RPMPOut = 8
-RPMIOut = 9
-RPMIboundedOut = 10
-RPMDOut = 11
+RPMControlOutput = 9
+RPMPOut = 10
+RPMIOut = 11
+RPMIboundedOut = 12
+RPMDOut = 13
 
-ClchControlOutput = 13
-ClchPOut = 14
-ClchIOut = 15
-ClchIboundedOut = 16
-ClchDOut = 17
+ClchControlOutput = 17
+ClchPOut = 18
+ClchIOut = 19
+ClchIboundedOut = 20
+ClchDOut = 21
+
+EngineStartChannel = 22
 
 -- Global Variables
 SpdI = 0
@@ -61,6 +63,8 @@ ClchP0 = 0
 
 ClutchMode = true
 Idle = true
+
+clchOut = 0
 
 function onTick()
 	
