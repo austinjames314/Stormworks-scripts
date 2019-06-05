@@ -1,7 +1,8 @@
 --Declare Constants
 
 ClutchRPM = 200
-IdleRPM = 130
+IdleRPM = 150
+MinimumKPH = 55
 
 --Input channels
 SpdSetPointChannel = 1
@@ -57,90 +58,150 @@ SpdP0 = 0
 
 RPMI = 0
 RPMP0 = 0
+RPMSmoothed = 0
 
 ClchI = 0
 ClchP0 = 0
 
 ClutchMode = true
 Idle = true
+Running = false
 
 clchOut = 0
 
 function onTick()
-	
 	spdSetPoint = input.getNumber(SpdSetPointChannel)
-	
-	--If the target speed is zero, then go to idle mode
-	if spdSetPoint == 0 then
+	spdProcVar = input.getNumber(SpdProcVarChannel)
+	Running = input.getBool(EngineRunChannel)
+	rpmProcVar = input.getNumber(RPMProcVarChannel)
+	rpmDiff = RPMP0 - rpmProcVar
+
+
+	if not Running then
+		output.setNumber(SpdControlOutput, 0)
+		output.setNumber(ClchControlOutput, 0)
+	elseif rpmProcVar < 120 then
+		output.setNumber(SpdControlOutput, 1)
+		output.setBool(EngineStartChannel, true)
+	else
+		output.setBool(EngineStartChannel, false)
+	end
+
+	if spdSetPoint <= 0 then
 		Idle = true
 		ClutchMode = true
 	else
 		Idle = false
 	end
-	
-	if ClutchMode then
-		--In this mode, RPM is held constant, and the clutch is varied to control speed.
-		if Idle then
-			rpmSetPoint = IdleRPM
-		else 
-			rpmSetPoint = ClutchRPM
-		end
-		
-		--PID to control RPM
-		rpmProcVar = input.getNumber(RPMProcVarChannel)
 
-		Kp = input.getNumber(RPMKpChannel)
-		Ki = input.getNumber(RPMKiChannel)
-		Kd = input.getNumber(RPMKdChannel)
-		KiMinC = input.getNumber(RPMKiMaxChannel)
-		KiMaxC = input.getNumber(RPMKiMinChannel)
 
-		error = rpmSetPoint - rpmProcVar
-	
-		P = error * Kp
-		--debug
-		output.setNumber(RPMPOut, P)
-	
-		RPMI = RPMI + error * Ki
-		--debug
-		output.setNumber(RPMIOut, I)
-
-		--Limit I to prevent integral windup
-		I = math.min(RPMKiMaxC,math.max(RPMKiMinC, I))
-		--debug
-		output.setNumber(RPMIboundedOut, I)
-	
-		D = Kd * (RPMP0 - rpmProcVar)
-		--To calculate D next tick
-		RPMP0 = rpmProcVar
-		--debug
-		output.setNumber(RPMDOut, D)
-
-		out = P + I + D
-		--Output result, NOTE: this is to control throttle so it needs to use same output channel as for Speed.
-		output.setNumber(SpdControlOutput, out)
-		
-		if Idle then
-			--fully disengage clutch
-			output.setNumber(ClchControlOutput, 0)
-		else
-			--PID to control speed with clutch
-			clchOut = 0
-		end
+	--section to control RPM
+	if Idle then
+		rpmSetPoint = IdleRPM
 	else
-		--In this mode, the clutch has fully engaged. We're just using throttle to control speed.
-		
-		--PID to control throttle/speed
+		spdAdj = math.min(1,math.max(0, spdProcVar / MinimumKPH))
+		offset = spdAdj * (20 + ClutchRPM - IdleRPM)
+		rpmSetPoint = ClutchRPM - offset
 	end
+
+	Kp = input.getNumber(RPMKpChannel)
+	Ki = input.getNumber(RPMKiChannel)
+	Kd = input.getNumber(RPMKdChannel)
+	KiMaxC = input.getNumber(RPMKiMaxChannel)
+	KiMinC = input.getNumber(RPMKiMinChannel)
+
+	error = rpmSetPoint - rpmProcVar
+
+	P = error * Kp
+
+	RPMI = RPMI + (error * Ki)
+	RPMI = math.min(KiMaxC,math.max(KiMinC, RPMI))
+
+	D = Kd * rpmDiff
+	RPMP0 = rpmProcVar
+	if ClutchMode then
+		output.setNumber(SpdControlOutput, P + RPMI + D)
+	end
+
+	--section to control speed with clutch
+	Kp = input.getNumber(ClchKpChannel)
+	Ki = input.getNumber(ClchKiChannel)
+	Kd = input.getNumber(ClchKdChannel)
+	KiMaxC = input.getNumber(ClchKiMaxChannel)
+	KiMinC = input.getNumber(ClchKiMinChannel)
+
+	stall = false
+	if (rpmProcVar - 120) < rpmDiff then
+		stall = true
+	end
+
+	error = spdSetPoint - spdProcVar
+
+	P = error * Kp
+	output.setNumber(ClchPOut, P)
+
+	if stall then
+		ClchI = ClchI - error * Ki
+	else
+		ClchI = ClchI + error * Ki
+	end
+	output.setNumber(ClchIOut, ClchI)
+
+	ClchI = math.min(KiMaxC,math.max(KiMinC, ClchI))
+	output.setNumber(ClchIboundedOut, ClchI)
+
+	D = Kd * (ClchP0 - spdProcVar)
+	ClchP0 = spdProcVar
+	output.setNumber(ClchDOut, D)
 	
-	--If the clutch has been fully engaged, leave clutchmode
-	--Need to add in the clutch output var here!!!
+	D2 = Kd * -1/math.abs(rpmProcVar - 120)
+
+	if stall then
+		clchOut = 0
+	else
+		clchOut = P + ClchI + D + D2
+	end
+
+	if Idle then
+		output.setNumber(ClchControlOutput, 0)
+	elseif ClutchMode then
+		output.setNumber(ClchControlOutput, clchOut)
+	else
+		output.setNumber(ClchControlOutput, 1)
+	end
+
+	--section to control speed with throttle
+	Kp = input.getNumber(SpdKpChannel)
+	Ki = input.getNumber(SpdKiChannel)
+	Kd = input.getNumber(SpdKdChannel)
+	KiMaxC = input.getNumber(SpdKiMaxChannel)
+	KiMinC = input.getNumber(SpdKiMinChannel)
+
+	error = spdSetPoint - spdProcVar
+
+	P = error * Kp
+	output.setNumber(SpdPOut, P)
+
+	SpdI = SpdI + error * Ki
+	output.setNumber(SpdIOut, SpdI)
+
+	SpdI = math.min(KiMaxC,math.max(KiMinC, SpdI))
+	output.setNumber(SpdIboundedOut, SpdI)
+
+	D = Kd * (SpdP0 - spdProcVar)
+	SpdP0 = spdProcVar
+	output.setNumber(SpdDOut, D)
+
+	out = P + SpdI + D
+	if not ClutchMode then
+		output.setNumber(SpdControlOutput, out)
+	end
+
 	if ClutchMode and (clchOut >= 1.0) then
 		ClutchMode = false
 	end
-	
-	--If not in clutchmode and the RPM drops to 125 (stalls at 120), then pop the clutch
-	if ~ClutchMode and (rpmProcVar <= 125) then
+
+	if not ClutchMode and (rpmProcVar <= 125) then
 		ClutchMode = true
 	end
 end
