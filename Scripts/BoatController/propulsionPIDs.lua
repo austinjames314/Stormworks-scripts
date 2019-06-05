@@ -79,7 +79,7 @@ clchOut --= 0
 local
 spdSetPoint, spdProcVar, rpmProcVar, rpmDiff, rpmSetPoint, spdAdj, offset, error, Kp, Ki, Kd, KiMaxC, KiMinC, stall
 
--- These shortcut functions exist so that the minifier can shrink the code used to call them.
+-- These system functions that get called a lot are put in these wrapper functions, so that the minifier can shrink the code used to call them.
 function getN(channelNumber)
     return input.getNumber(channelNumber)
 end
