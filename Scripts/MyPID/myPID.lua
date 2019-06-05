@@ -28,8 +28,8 @@ function onTick()
 	Kp = input.getNumber(KpChannel)
 	Ki = input.getNumber(KiChannel)
 	Kd = input.getNumber(KdChannel)
-	KiMinC = input.getNumber(KiMaxChannel)
-	KiMaxC = input.getNumber(KiMinChannel)
+	KiMaxC = input.getNumber(KiMaxChannel)
+	KiMinC = input.getNumber(KiMinChannel)
 
 	error = setPoint - procVar
 	
