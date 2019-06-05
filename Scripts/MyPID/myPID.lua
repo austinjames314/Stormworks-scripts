@@ -46,9 +46,9 @@ function onTick()
 	--debug
 	output.setNumber(IboundedOut, I)
 	
-	D = Kd * (P0 - procVar)
+	D = Kd * (error - P0)
 	--To calculate D next tick
-	P0 = procVar
+	P0 = error
 	--debug
 	output.setNumber(DOut, D)
 
