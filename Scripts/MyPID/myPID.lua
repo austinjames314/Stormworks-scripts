@@ -11,10 +11,10 @@ local KdChannel = 7
 
 --Output channels
 local ControlOutputChannel = 1
-local POut = 2
-local IOut = 3
-local IboundedOut = 4
-local DOut = 5
+local POutChannel = 2
+local IOutChannel = 3
+local IboundedOutChannel = 4
+local DOutChannel = 5
 
 -- Global Variables that need intialising
 local I = 0
@@ -45,8 +45,8 @@ function setB(channelNumber, value)
 end
 --]]
 
-function PID(KpChannel, KiChannel, KdChannel, IMaxChannel, IMinChannel, setPoint, processVariable, POut, IOut, IboundedOut, DOut)
-	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external.
+function PID(KpChannel, KiChannel, KdChannel, IMaxChannel, IMinChannel, setPoint, processVariable, I, P0, POutChannel, IOutChannel, IboundedOutChannel, DOutChannel)
+	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external inputs, to support live tuning.
 	Kp = getN(KpChannel)
 	Ki = getN(KiChannel)
 	Kd = getN(KdChannel)
@@ -57,24 +57,24 @@ function PID(KpChannel, KiChannel, KdChannel, IMaxChannel, IMinChannel, setPoint
 	
 	P = error * Kp
 	--debug
-	setN(POut, P)
+	setN(POutChannel, P)
 	
 	I = I + error * Ki
 	--debug
-	setN(IOut, I)
+	setN(IOutChannel, I)
 
 	--Limit I to prevent integral windup
 	I = math.min(iMax,math.max(iMin, I))
 	--debug
-	setN(IboundedOut, I)
+	setN(IboundedOutChannel, I)
 	
 	D = Kd * (error - P0)
 	--To calculate D next tick
 	P0 = error
 	--debug
-	setN(DOut, D)
+	setN(DOutChannel, D)
 
-	return P + I + D
+	return P + I + D, I, P0
 end
 
 function onTick()
@@ -82,5 +82,6 @@ function onTick()
 	processVariable = getN(ProcVarChannel)
 
 	--Calculate and output result
-	setN(ControlOutputChannel, PID(Kp, Ki, Kd, KiMax, KiMin, setPoint, processVariable, POut, IOut, IboundedOut, DOut))
+	out, I, P0 = PID(KpChannel, KiChannel, KdChannel, KiMaxChannel, KiMinChannel, setPoint, processVariable, I, P0, POutChannel, IOutChannel, IboundedOutChannel, DOutChannel)
+	setN(ControlOutputChannel, out)
 end
