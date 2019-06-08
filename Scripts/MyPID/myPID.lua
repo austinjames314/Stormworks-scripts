@@ -21,10 +21,10 @@ PIDTable1.I = 0
 PIDTable1.P0 = 0
 
 -- Global Variables that need intialising
-local error_0 = 0
+--nil
 
 -- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
-local error, error_s, processVariable, setPoint, PIDStructTable, iMax, iMin, smooth, text
+local processVariable, setPoint, error, error_s, iMax, iMin, smooth
 
 -- These system functions that get called a lot are put in these wrapper functions, so that the minifier can shrink the code used to call them.
 function getN(channelNumber)
