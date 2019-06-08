@@ -20,6 +20,19 @@ local DOutChannel = 5
 local PIDTable1 = {}
 local error_0 = 0
 
+PIDTable1[KpChannel] = KpChannel
+PIDTable1[KiChannel] = KiChannel
+PIDTable1[IMaxChannel] = IMaxChannel
+PIDTable1[IMinChannel] = IMinChannel
+PIDTable1[KdChannel] = KdChannel
+PIDTable1[ControlOutputChannel] = ControlOutputChannel
+PIDTable1[POutChannel] = POutChannel
+PIDTable1[IOutChannel] = IOutChannel
+PIDTable1[IboundedOutChannel] = IboundedOutChannel
+PIDTable1[DOutChannel] = DOutChannel
+PIDTable1.I = 0
+PIDTable1.P0 = 0
+
 -- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
 local error, processVariable, setPoint, PIDStructTable, text
 
@@ -67,21 +80,6 @@ function PID(PIDStructTable, setPoint, processVariable)
 end
 
 function onTick()
-	-- On the first tick ever, initialise the PID table with the appropriate values
-	if PIDTable1[KpChannel] == nil then
-		PIDTable1[KpChannel] = KpChannel
-		PIDTable1[KiChannel] = KiChannel
-		PIDTable1[IMaxChannel] = IMaxChannel
-		PIDTable1[IMinChannel] = IMinChannel
-		PIDTable1[KdChannel] = KdChannel
-		PIDTable1[ControlOutputChannel] = ControlOutputChannel
-		PIDTable1[POutChannel] = POutChannel
-		PIDTable1[IOutChannel] = IOutChannel
-		PIDTable1[IboundedOutChannel] = IboundedOutChannel
-		PIDTable1[DOutChannel] = DOutChannel
-		PIDTable1.I = 0
-		PIDTable1.P0 = 0
-	end
 	setPoint = getN(SetPointChannel)
 	processVariable = getN(ProcVarChannel)
 
