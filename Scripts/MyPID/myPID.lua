@@ -3,40 +3,28 @@
 --Input channels
 local SetPointChannel = 1
 local ProcVarChannel = 2
-local KpChannel = 3
-local KiChannel = 4
-local IMaxChannel = 5
-local IMinChannel = 6
-local KdChannel = 7
-local SmoothingChannel = 8
-
---Output channels
-local ControlOutputChannel = 1
-local POutChannel = 2
-local IOutChannel = 3
-local IboundedOutChannel = 4
-local DOutChannel = 5
-
--- Global Variables that need intialising
 local PIDTable1 = {}
-local error_0 = 0
-
-PIDTable1[KpChannel] = KpChannel
-PIDTable1[KiChannel] = KiChannel
-PIDTable1[IMaxChannel] = IMaxChannel
-PIDTable1[IMinChannel] = IMinChannel
-PIDTable1[KdChannel] = KdChannel
-PIDTable1[SmoothingChannel] = SmoothingChannel
-PIDTable1[ControlOutputChannel] = ControlOutputChannel
-PIDTable1[POutChannel] = POutChannel
-PIDTable1[IOutChannel] = IOutChannel
-PIDTable1[IboundedOutChannel] = IboundedOutChannel
-PIDTable1[DOutChannel] = DOutChannel
+PIDTable1.KpC = 3
+PIDTable1.KiC = 4
+PIDTable1.IMxC = 5
+PIDTable1.IMnC = 6
+PIDTable1.KdC = 7
+PIDTable1.SmthC = 8
+--output channels
+PIDTable1.OutC = 1
+PIDTable1.PC = 2
+PIDTable1.IC = 3
+PIDTable1.IbC = 4
+PIDTable1.DC = 5
+--PID variables
 PIDTable1.I = 0
 PIDTable1.P0 = 0
 
+-- Global Variables that need intialising
+local error_0 = 0
+
 -- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
-local error, error_s, processVariable, setPoint, PIDStructTable, smooth, text
+local error, error_s, processVariable, setPoint, PIDStructTable, iMax, iMin, smooth, text
 
 -- These system functions that get called a lot are put in these wrapper functions, so that the minifier can shrink the code used to call them.
 function getN(channelNumber)
@@ -49,27 +37,27 @@ end
 
 function PID(PIDStructTable, setPoint, processVariable)
 	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external inputs, to support live tuning.
-	Kp = getN(PIDStructTable[KpChannel])
-	Ki = getN(PIDStructTable[KiChannel])
-	Kd = getN(PIDStructTable[KdChannel])
-	iMax = getN(PIDStructTable[IMaxChannel])
-	iMin = getN(PIDStructTable[IMinChannel])
-	smooth = getN(PIDTable1[SmoothingChannel])
+	Kp = getN(PIDStructTable.KpC)
+	Ki = getN(PIDStructTable.KiC)
+	Kd = getN(PIDStructTable.KdC)
+	iMax = getN(PIDStructTable.IMxC)
+	iMin = getN(PIDStructTable.IMnC)
+	smooth = getN(PIDStructTable.SmthC)
 
 	error = setPoint - processVariable
 	
 	PIDStructTable.P = error * Kp
 	--debug
-	setN(POutChannel, PIDStructTable.P)
+	setN(PIDStructTable.PC, PIDStructTable.P)
 	
 	PIDStructTable.I = PIDStructTable.I + error * Ki
 	--debug
-	setN(IOutChannel, PIDStructTable.I)
+	setN(PIDStructTable.IC, PIDStructTable.I)
 
 	--Limit I to prevent integral windup
 	PIDStructTable.I = math.min(iMax,math.max(iMin, PIDStructTable.I))
 	--debug
-	setN(IboundedOutChannel, PIDStructTable.I)
+	setN(PIDStructTable.IbC, PIDStructTable.I)
 	
 	error_s = smooth * error + (1 - smooth) * PIDStructTable.P0
 	
@@ -77,7 +65,7 @@ function PID(PIDStructTable, setPoint, processVariable)
 	--To calculate D next tick
 	PIDStructTable.P0 = error_s
 	--debug
-	setN(DOutChannel, PIDStructTable.D)
+	setN(PIDStructTable.DC, PIDStructTable.D)
 
 	PIDStructTable.out = PIDStructTable.P + PIDStructTable.I + PIDStructTable.D
 end
@@ -88,5 +76,5 @@ function onTick()
 
 	--Calculate and output result
 	PID(PIDTable1, setPoint, processVariable)
-	setN(ControlOutputChannel, PIDTable1.out)
+	setN(PIDTable1.OutC, PIDTable1.out)
 end
