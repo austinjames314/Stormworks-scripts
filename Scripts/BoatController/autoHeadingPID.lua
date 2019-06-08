@@ -33,13 +33,6 @@ local function setN(channelNumber, value)
     output.setNumber(channelNumber, value)
 end
 
-	--For heading error, hdg2 = target heading, hdg1 = current heading
-	--For heading change, hdg2 = new heading, hd1 = old heading
-local function headingDiff(heading1, heading2)
-	return heading2 - heading1
-end
-	
-
 function PID(PIDStructTable, setPoint, processVariable)
 	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external inputs, to support live tuning.
 	Kp = getN(PIDStructTable[KpChannel])
@@ -78,10 +71,6 @@ function PID(PIDStructTable, setPoint, processVariable)
 	setN(DOutChannel, PIDStructTable.D)
 
 	PIDStructTable.out = PIDStructTable.P + PIDStructTable.I + PIDStructTable.D
-end
-
-function getB(channelNumber)
-    return input.getBool(channelNumber)
 end
 
 function onTick()
