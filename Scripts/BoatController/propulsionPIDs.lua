@@ -1,83 +1,195 @@
 --Declare Constants
-local 
-ClutchRPM, --= 200
-IdleRPM, --= 150
-MinimumKPH, --= 55
+
+local ClutchRPM = 200
+local IdleRPM = 130
+local MinimumKPH = 55
+local StallCounterLimit = 120
 
 --Input channels
-SpdSetPointChannel, --= 1
-SpdProcVarChannel, --= 2
-SpdKpChannel, --= 3
-SpdKiChannel, --= 4
-SpdKiMaxChannel, --= 5
-SpdKiMinChannel, --= 6
-SpdKdChannel, --= 7
+local SpdSetPointChannel = 1
+local SpdProcVarChannel = 2
+local SpdPIDTable = {}
+SpdPIDTable.KpC = 3
+SpdPIDTable.KiC = 4
+SpdPIDTable.IMxC = 5
+SpdPIDTable.IMnC = 6
+SpdPIDTable.KdC = 7
+SpdPIDTable.SmthC = 8
+--output channels
+SpdPIDTable.OutC = 1
+SpdPIDTable.PC = 2
+SpdPIDTable.IC = 3
+SpdPIDTable.IbC = 4
+SpdPIDTable.DC = 5
+--PID variables
+SpdPIDTable.I = 0
+SpdPIDTable.Er0 = 0
+SpdPIDTable.Pv0 = 0
 
-RPMSetPointChannel, --= 9
-RPMProcVarChannel, --= 10
-RPMKpChannel, --= 11
-RPMKiChannel, --= 12
-RPMKiMaxChannel, --= 13
-RPMKiMinChannel, --= 14
-RPMKdChannel, --= 15
+--Input channels
+local RPMSetPointChannel = 9
+local RPMProcVarChannel = 10
+local RPMPIDTable = {}
+RPMPIDTable.KpC = 11
+RPMPIDTable.KiC = 12
+RPMPIDTable.IMxC = 13
+RPMPIDTable.IMnC = 14
+RPMPIDTable.KdC = 15
+RPMPIDTable.SmthC = 16
+--output channels
+RPMPIDTable.OutC = 9
+RPMPIDTable.PC = 10
+RPMPIDTable.IC = 11
+RPMPIDTable.IbC = 12
+RPMPIDTable.DC = 13
+--PID variables
+RPMPIDTable.I = 0
+RPMPIDTable.Er0 = 0
+RPMPIDTable.Pv0 = 0
 
-ClchSetPointChannel, --= 17
-ClchProcVarChannel, --= 18
-ClchKpChannel, --= 19
-ClchKiChannel, --= 20
-ClchKiMaxChannel, --= 21
-ClchKiMinChannel, --= 22
-ClchKdChannel, --= 23
+--Input channels
+local ClchSetPointChannel = 17
+local ClchProcVarChannel = 18
+local ClchPIDTable = {}
+ClchPIDTable.KpC = 19
+ClchPIDTable.KiC = 20
+ClchPIDTable.IMxC = 21
+ClchPIDTable.IMnC = 22
+ClchPIDTable.KdC = 23
+ClchPIDTable.SmthC = 24
+--output channels
+ClchPIDTable.OutC = 17
+ClchPIDTable.PC = 18
+ClchPIDTable.IC = 19
+ClchPIDTable.IbC = 20
+ClchPIDTable.DC = 21
+--PID variables
+ClchPIDTable.I = 0
+ClchPIDTable.Er0 = 0
+ClchPIDTable.Pv0 = 0
 
 -- This is one is for the on/off switch. Should get fed a boolean. If true, it starts the engine. Shuts down if false.
-EngineRunChannel, --= 24
+local EngineRunChannel = 25
+
 
 --Output channels
-SpdControlOutput, --= 1
-SpdPOut, --= 2
-SpdIOut, --= 3
-SpdIboundedOut, --= 4
-SpdDOut, --= 5
 
-RPMControlOutput, --= 9
-RPMPOut, --= 10
-RPMIOut, --= 11
-RPMIboundedOut, --= 12
-RPMDOut, --= 13
+-- To be connected to engine starters.
+local EngineStartChannel = 25
 
-ClchControlOutput, --= 17
-ClchPOut, --= 18
-ClchIOut, --= 19
-ClchIboundedOut, --= 20
-ClchDOut, --= 21
+-- Global Variables that need intialising
+local ClutchMode = true
+local Idle = true
+local Running = false
+local RPM0 = 0
+local StallCounter = 0
 
---To be connected to engine starters.
-EngineStartChannel, --= 22
+-- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
+local spdSetPoint, spdProcVar, rpmSetPoint, rpmProcVar, spdAdj, offset, stall, rpmDiff, error, error_s, iMax, iMin, smooth
 
--- Global Variables
-SpdI, --= 0
-SpdP0, --= 0
+function onTick()
+	spdSetPoint = getN(SpdSetPointChannel)
+	spdProcVar = getN(SpdProcVarChannel)
+	Running = getB(EngineRunChannel)
+	rpmProcVar = getN(RPMProcVarChannel)
 
-RPMI, --= 0
-RPMP0, --= 0
-RPMSmoothed, --= 0
+	if not Running then
+		setN(SpdPIDTable.OutC, 0)
+		setN(ClchPIDTable.OutC, 0)
+		RPMPIDTable.I = 0
+	elseif rpmProcVar < 120 then
+		setN(SpdPIDTable.OutC, 1)
+		setB(EngineStartChannel, true)
+	else
+		setB(EngineStartChannel, false)
+	end
 
-ClchI, --= 0
-ClchP0, --= 0
+	if spdSetPoint <= 0 then
+		Idle = true
+		ClutchMode = true
+	else
+		Idle = false
+	end
 
-ClutchMode, --= true
-Idle, --= true
-Running, --= false
+	---- Section to control RPM
 
-clchOut --= 0
+	--This block checks:
+	-- If we're in idle mode, set the target RPM to the Idle RPM
+	-- otherwise, put the RPM up to the clutchMode RPM, but scale it back towards the stall speed as we get closer to the clutch being fully engaged (minimumKPH)
+	--The issue is that if it kept trying to keep the RPM high, it'd way overshoot the speed where the clutch _could_ be fully engaged.
+	if Idle then
+		rpmSetPoint = IdleRPM
+	else
+		--The idea here to end up with an RPM at IdleRPM when speed hits MinimumKPH
+		spdAdj = math.min(1,math.max(0, spdProcVar / MinimumKPH))
+		offset = spdAdj * (ClutchRPM - IdleRPM)
+		rpmSetPoint = ClutchRPM - offset
+	end
+	
+	PID(RPMPIDTable, rpmSetPoint, rpmProcVar)
+	if ClutchMode then
+		setN(SpdPIDTable.OutC, RPMPIDTable.out)
+	end
 
-= 200, 150, 55, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24,
-1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 17, 18, 19, 21, 22,
-0, 0, 0, 0, 0, 0, 0, true, true, false, 0
+    ---- Section to control speed with clutch
 
---Local variables declared here to help the minifier
-local
-spdSetPoint, spdProcVar, rpmProcVar, rpmDiff, rpmSetPoint, spdAdj, offset, error, Kp, Ki, Kd, KiMaxC, KiMinC, stall
+	--This looks at the rate of RPM change. The idea is to set the 'stall' flag to true if we're 2 ticks away from hitting the stall speed.
+	rpmDiff = RPM0 - rpmProcVar
+	RPM0 = rpmProcVar
+	stall = false
+	if (rpmProcVar - 120) <= (rpmDiff * 2) --[[ or rpmProcVar <= 125 ]] then
+		stall = true
+	end
+
+	--This block progressively eases back on the target speed, when we get close to the stall speed, so that that PID controller eases off the clutch a little.
+	--The aim being to not stall the damn thing so much.
+	if stall then
+		--StallCounter = math.min(StallCounter + 10, StallCounterLimit)
+		--ClchPIDTable.I = ClchPIDTable.I * 0.99^10
+		ClchPIDTable.I = ClchPIDTable.I * 0.95
+	elseif StallCounter > 0 then
+		--StallCounter = math.max(StallCounter - 1, 0)
+		--ClchPIDTable.I = ClchPIDTable.I / 0.99
+	end
+	--spdSetPoint = spdSetPoint * (1 - StallCounter / StallCounterLimit)
+	PID(ClchPIDTable, spdSetPoint, spdProcVar)
+
+	--Whether or not to use the PID's output on the clutch, or whether to lock it open or closed.
+	if Idle then
+		setN(ClchPIDTable.OutC, 0)
+	elseif ClutchMode then
+		setN(ClchPIDTable.OutC, ClchPIDTable.out)
+	else
+		setN(ClchPIDTable.OutC, 1)
+	end
+
+    ---- Section to control speed with throttle
+	PID(SpdPIDTable, spdSetPoint, spdProcVar)
+
+
+	if not ClutchMode then
+		setN(SpdPIDTable.OutC, SpdPIDTable.out)
+	end
+
+
+	-- changes to make when transitioning from clutch mode to cruise mode
+	if ClutchMode and (ClchPIDTable.out >= 1.0) then
+		ClutchMode = false
+		SpdPIDTable.I = 0.45
+	end
+
+	-- changes to make when transitioning from cruise mode to clutch mode
+	if not ClutchMode and (rpmProcVar <= 125) then
+		ClutchMode = true
+		--[[ The idea here is to hand the throttle setting over from the cruise controller to the RPM controller for clutch mode
+			but to bump it a little bit to overcome Stormworks' fuckiness in that the torque _increases_ at first, as you release
+			the clutch.
+		--]]
+		RPMPIDTable.I = 0.8
+		-- This is the appropriate I value for when clutch mode is sitting at just below the changeover speed.
+		ClchPIDTable.I = 0.7
+	end
+end
 
 -- These system functions that get called a lot are put in these wrapper functions, so that the minifier can shrink the code used to call them.
 function getN(channelNumber)
@@ -96,148 +208,39 @@ function setB(channelNumber, value)
     output.setBool(channelNumber, value)
 end
 
-function onTick()
-	spdSetPoint = getN(SpdSetPointChannel)
-	spdProcVar = getN(SpdProcVarChannel)
-	Running = getB(EngineRunChannel)
-	rpmProcVar = getN(RPMProcVarChannel)
-	rpmDiff = RPMP0 - rpmProcVar
+function PID(PIDStructTable, setPoint, processVariable)
+	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external inputs, to support live tuning.
+	Kp = getN(PIDStructTable.KpC)
+	Ki = getN(PIDStructTable.KiC)
+	Kd = getN(PIDStructTable.KdC)
+	iMax = getN(PIDStructTable.IMxC)
+	iMin = getN(PIDStructTable.IMnC)
+	smooth = getN(PIDStructTable.SmthC)
 
-
-	if not Running then
-		setN(SpdControlOutput, 0)
-		setN(ClchControlOutput, 0)
-	elseif rpmProcVar < 120 then
-		setN(SpdControlOutput, 1)
-		setB(EngineStartChannel, true)
-	else
-		setB(EngineStartChannel, false)
-	end
-
-	if spdSetPoint <= 0 then
-		Idle = true
-		ClutchMode = true
-	else
-		Idle = false
-	end
-
-
-	--section to control RPM
-	if Idle then
-		rpmSetPoint = IdleRPM
-	else
-		spdAdj = math.min(1,math.max(0, spdProcVar / MinimumKPH))
-		offset = spdAdj * (20 + ClutchRPM - IdleRPM)
-		rpmSetPoint = ClutchRPM - offset
-    end
-    
-    --The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external.
-	Kp = getN(RPMKpChannel)
-	Ki = getN(RPMKiChannel)
-	Kd = getN(RPMKdChannel)
-	KiMaxC = getN(RPMKiMaxChannel)
-	KiMinC = getN(RPMKiMinChannel)
-
-	error = rpmSetPoint - rpmProcVar
-
-	P = error * Kp
-    --debug
-    setN(RPMPOut, P)
-    
-    RPMI = RPMI + (error * Ki)
-    --debug
-	setN(RPMIOut, RPMI)
-    --Limit I to prevent integral windup
-	RPMI = math.min(KiMaxC,math.max(KiMinC, RPMI))
-
-	D = Kd * rpmDiff
-	RPMP0 = rpmProcVar
-	if ClutchMode then
-		setN(SpdControlOutput, P + RPMI + D)
-	end
-
-    --section to control speed with clutch
-    --The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external.
-	Kp = getN(ClchKpChannel)
-	Ki = getN(ClchKiChannel)
-	Kd = getN(ClchKdChannel)
-	KiMaxC = getN(ClchKiMaxChannel)
-	KiMinC = getN(ClchKiMinChannel)
-
-	stall = false
-	if (rpmProcVar - 120) < rpmDiff then
-		stall = true
-	end
-
-	error = spdSetPoint - spdProcVar
-
-    P = error * Kp
-    --debug
-	setN(ClchPOut, P)
-
-	if stall then
-		ClchI = ClchI - error * Ki
-	else
-		ClchI = ClchI + error * Ki
-	end
-	setN(ClchIOut, ClchI)
-
-	ClchI = math.min(KiMaxC,math.max(KiMinC, ClchI))
-	setN(ClchIboundedOut, ClchI)
-
-	D = Kd * (ClchP0 - spdProcVar)
-	ClchP0 = spdProcVar
-	setN(ClchDOut, D)
+	error = setPoint - processVariable
 	
-	D2 = Kd * -1/math.abs(rpmProcVar - 120)
+	PIDStructTable.P = error * Kp
+	--debug
+	setN(PIDStructTable.PC, PIDStructTable.P)
+	
+	PIDStructTable.I = PIDStructTable.I + error * Ki
+	--debug
+	setN(PIDStructTable.IC, PIDStructTable.I)
 
-	if stall then
-		clchOut = 0
-	else
-		clchOut = P + ClchI + D + D2
-	end
+	--Limit I to prevent integral windup
+	PIDStructTable.I = math.min(iMax,math.max(iMin, PIDStructTable.I))
+	--debug
+	setN(PIDStructTable.IbC, PIDStructTable.I)
+	
+	error = PIDStructTable.Pv0 - processVariable
+	PIDStructTable.Pv0 = processVariable
+	error_s = smooth * error + (1 - smooth) * PIDStructTable.Er0
+	
+	PIDStructTable.D = Kd * error_s
+	--To calculate D next tick
+	PIDStructTable.Er0 = error_s
+	--debug
+	setN(PIDStructTable.DC, PIDStructTable.D)
 
-	if Idle then
-		setN(ClchControlOutput, 0)
-	elseif ClutchMode then
-		setN(ClchControlOutput, clchOut)
-	else
-		setN(ClchControlOutput, 1)
-	end
-
-    --section to control speed with throttle
-    --The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external.
-	Kp = getN(SpdKpChannel)
-	Ki = getN(SpdKiChannel)
-	Kd = getN(SpdKdChannel)
-	KiMaxC = getN(SpdKiMaxChannel)
-	KiMinC = getN(SpdKiMinChannel)
-
-	error = spdSetPoint - spdProcVar
-
-	P = error * Kp
-	setN(SpdPOut, P)
-
-	SpdI = SpdI + error * Ki
-	setN(SpdIOut, SpdI)
-
-	SpdI = math.min(KiMaxC,math.max(KiMinC, SpdI))
-	setN(SpdIboundedOut, SpdI)
-
-	D = Kd * (SpdP0 - spdProcVar)
-	SpdP0 = spdProcVar
-	setN(SpdDOut, D)
-
-	out = P + SpdI + D
-	if not ClutchMode then
-		setN(SpdControlOutput, out)
-	end
-
-	if ClutchMode and (clchOut >= 1.0) then
-		ClutchMode = false
-	end
-
-	if not ClutchMode and (rpmProcVar <= 125) then
-		ClutchMode = true
-	end
+	PIDStructTable.out = PIDStructTable.P + PIDStructTable.I + PIDStructTable.D
 end
