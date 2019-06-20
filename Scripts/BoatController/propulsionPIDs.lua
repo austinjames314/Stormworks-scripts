@@ -97,6 +97,7 @@ function onTick()
 		setN(SpdPIDTable.OutC, 0)
 		setN(ClchPIDTable.OutC, 0)
 		RPMPIDTable.I = 0
+		setB(EngineStartChannel, false)
 	elseif rpmProcVar < 120 then
 		setN(SpdPIDTable.OutC, 1)
 		setB(EngineStartChannel, true)
@@ -137,7 +138,7 @@ function onTick()
 	rpmDiff = RPM0 - rpmProcVar
 	RPM0 = rpmProcVar
 	stall = false
-	if (rpmProcVar - 120) <= (rpmDiff * 2) --[[ or rpmProcVar <= 125 ]] then
+	if (rpmProcVar - 120) <= (rpmDiff * 2) or rpmProcVar <= 122.5 then
 		stall = true
 	end
 
@@ -155,7 +156,7 @@ function onTick()
 	PID(ClchPIDTable, spdSetPoint, spdProcVar)
 
 	--Whether or not to use the PID's output on the clutch, or whether to lock it open or closed.
-	if Idle then
+	if Idle or rpmProcVar < 115 then
 		setN(ClchPIDTable.OutC, 0)
 	elseif ClutchMode then
 		setN(ClchPIDTable.OutC, ClchPIDTable.out)
@@ -181,9 +182,9 @@ function onTick()
 	-- changes to make when transitioning from cruise mode to clutch mode
 	if not ClutchMode and (rpmProcVar <= 125) then
 		ClutchMode = true
-		--[[ The idea here is to hand the throttle setting over from the cruise controller to the RPM controller for clutch mode
+		--[[ The idea here was to hand the throttle setting over from the cruise controller to the RPM controller for clutch mode
 			but to bump it a little bit to overcome Stormworks' fuckiness in that the torque _increases_ at first, as you release
-			the clutch.
+			the clutch. But ub the end I just hardcoded it, and it seems to work now.
 		--]]
 		RPMPIDTable.I = 0.8
 		-- This is the appropriate I value for when clutch mode is sitting at just below the changeover speed.
