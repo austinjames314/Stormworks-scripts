@@ -1,4 +1,6 @@
 -- Declare Constants
+Open = 1
+Closed = 0
 
 -- 1 = open or opening. 0 = closed or closing
 State = 0
@@ -22,10 +24,10 @@ function onTick()
 			
 			ButtonPressed = true
 			
-			if State == 0 then
-				State = 1
-			elseif State == 1 then
-				State = 0
+			if State == Closed then
+				State = Open
+			elseif State == Open then
+				State = Closed
 			end
 		end
 	else
