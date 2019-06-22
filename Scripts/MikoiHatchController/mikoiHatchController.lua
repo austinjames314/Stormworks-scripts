@@ -28,8 +28,8 @@ HatchToggleChannelIn = 1
 PlatformToggleChannelIn = 2
 
 -- State variables
-HatchState = 0
-LiftState = 0
+HatchState = SlidingClosed
+LiftState = Lowering
 
 HatchButtonPressed = false
 LiftButtonPressed = false
