@@ -28,6 +28,7 @@ function onTick()
             
             -- Change the door state to open.
             DoorState = Open
+            SleepTimer = 0
         end
     else
         -- When the button is released, reset the ButtonPressed flag.
@@ -40,9 +41,9 @@ function onTick()
         output.setBool(1, true)
         
         -- when time is up, close the door.
-        if SleepTimer >= input.getBool(DoorTimeChannel) * 60 then
+        if SleepTimer >= input.getNumber(DoorTimeChannel) then
             output.setBool(1, false)
             DoorState = Closed
-            SleepTimer = 0
         end
+    end
 end
