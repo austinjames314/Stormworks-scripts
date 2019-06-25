@@ -98,6 +98,7 @@ function onTick()
 		setN(ClchPIDTable.OutC, 0)
 		RPMPIDTable.I = 0
 		setB(EngineStartChannel, false)
+		return
 	elseif rpmProcVar < 120 then
 		setN(SpdPIDTable.OutC, 1)
 		setB(EngineStartChannel, true)
