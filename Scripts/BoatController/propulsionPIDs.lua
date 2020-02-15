@@ -1,9 +1,8 @@
 --Declare Constants
 
-local ClutchRPM = 200
-local IdleRPM = 130
-local MinimumKPH = 55
-local StallCounterLimit = 120
+local IdleRPM = 150
+local MinThrottle = 0.25
+local ClutchChannel = 17
 
 --Input channels
 local SpdSetPointChannel = 1
@@ -47,30 +46,8 @@ RPMPIDTable.I = 0
 RPMPIDTable.Er0 = 0
 RPMPIDTable.Pv0 = 0
 
---Input channels
-local ClchSetPointChannel = 17
-local ClchProcVarChannel = 18
-local ClchPIDTable = {}
-ClchPIDTable.KpC = 19
-ClchPIDTable.KiC = 20
-ClchPIDTable.IMxC = 21
-ClchPIDTable.IMnC = 22
-ClchPIDTable.KdC = 23
-ClchPIDTable.SmthC = 24
---output channels
-ClchPIDTable.OutC = 17
-ClchPIDTable.PC = 18
-ClchPIDTable.IC = 19
-ClchPIDTable.IbC = 20
-ClchPIDTable.DC = 21
---PID variables
-ClchPIDTable.I = 0
-ClchPIDTable.Er0 = 0
-ClchPIDTable.Pv0 = 0
-
 -- This is one is for the on/off switch. Should get fed a boolean. If true, it starts the engine. Shuts down if false.
 local EngineRunChannel = 25
-
 
 --Output channels
 
@@ -78,14 +55,11 @@ local EngineRunChannel = 25
 local EngineStartChannel = 25
 
 -- Global Variables that need intialising
-local ClutchMode = true
 local Idle = true
 local Running = false
-local RPM0 = 0
-local StallCounter = 0
 
 -- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
-local spdSetPoint, spdProcVar, rpmSetPoint, rpmProcVar, spdAdj, offset, stall, rpmDiff, error, error_s, iMax, iMin, smooth
+local spdSetPoint, spdProcVar, rpmSetPoint, rpmProcVar, error, error_s, iMax, iMin, smooth
 
 function onTick()
 	spdSetPoint = getN(SpdSetPointChannel)
@@ -95,7 +69,7 @@ function onTick()
 
 	if not Running then
 		setN(SpdPIDTable.OutC, 0)
-		setN(ClchPIDTable.OutC, 0)
+		setN(ClutchChannel, 0)
 		RPMPIDTable.I = 0
 		setB(EngineStartChannel, false)
 		return
@@ -108,88 +82,23 @@ function onTick()
 
 	if spdSetPoint <= 0 then
 		Idle = true
-		ClutchMode = true
 	else
 		Idle = false
 	end
 
-	---- Section to control RPM
-
-	--This block checks:
-	-- If we're in idle mode, set the target RPM to the Idle RPM
-	-- otherwise, put the RPM up to the clutchMode RPM, but scale it back towards the stall speed as we get closer to the clutch being fully engaged (minimumKPH)
-	--The issue is that if it kept trying to keep the RPM high, it'd way overshoot the speed where the clutch _could_ be fully engaged.
+	---- Section to control speed with throttle
 	if Idle then
 		rpmSetPoint = IdleRPM
-	else
-		--The idea here to end up with an RPM at IdleRPM when speed hits MinimumKPH
-		spdAdj = math.min(1,math.max(0, spdProcVar / MinimumKPH))
-		offset = spdAdj * (ClutchRPM - IdleRPM)
-		rpmSetPoint = ClutchRPM - offset
-	end
-	
-	PID(RPMPIDTable, rpmSetPoint, rpmProcVar)
-	if ClutchMode then
+		setN(ClutchChannel, 0)
+		PID(RPMPIDTable, rpmSetPoint, rpmProcVar)
 		setN(SpdPIDTable.OutC, RPMPIDTable.out)
-	end
-
-    ---- Section to control speed with clutch
-
-	--This looks at the rate of RPM change. The idea is to set the 'stall' flag to true if we're 2 ticks away from hitting the stall speed.
-	rpmDiff = RPM0 - rpmProcVar
-	RPM0 = rpmProcVar
-	stall = false
-	if (rpmProcVar - 120) <= (rpmDiff * 2) or rpmProcVar <= 122.5 then
-		stall = true
-	end
-
-	--This block progressively eases back on the target speed, when we get close to the stall speed, so that that PID controller eases off the clutch a little.
-	--The aim being to not stall the damn thing so much.
-	if stall then
-		--StallCounter = math.min(StallCounter + 10, StallCounterLimit)
-		--ClchPIDTable.I = ClchPIDTable.I * 0.99^10
-		ClchPIDTable.I = ClchPIDTable.I * 0.95
-	elseif StallCounter > 0 then
-		--StallCounter = math.max(StallCounter - 1, 0)
-		--ClchPIDTable.I = ClchPIDTable.I / 0.99
-	end
-	--spdSetPoint = spdSetPoint * (1 - StallCounter / StallCounterLimit)
-	PID(ClchPIDTable, spdSetPoint, spdProcVar)
-
-	--Whether or not to use the PID's output on the clutch, or whether to lock it open or closed.
-	if Idle or rpmProcVar < 115 then
-		setN(ClchPIDTable.OutC, 0)
-	elseif ClutchMode then
-		setN(ClchPIDTable.OutC, ClchPIDTable.out)
 	else
-		setN(ClchPIDTable.OutC, 1)
-	end
-
-    ---- Section to control speed with throttle
-	PID(SpdPIDTable, spdSetPoint, spdProcVar)
-
-
-	if not ClutchMode then
+		setN(ClutchChannel, 1)
+		PID(SpdPIDTable, spdSetPoint, spdProcVar)
+		if SpdPIDTable.out < MinThrottle then
+			SpdPIDTable.out = MinThrottle
+		end
 		setN(SpdPIDTable.OutC, SpdPIDTable.out)
-	end
-
-
-	-- changes to make when transitioning from clutch mode to cruise mode
-	if ClutchMode and (ClchPIDTable.out >= 1.0) then
-		ClutchMode = false
-		SpdPIDTable.I = 0.45
-	end
-
-	-- changes to make when transitioning from cruise mode to clutch mode
-	if not ClutchMode and (rpmProcVar <= 125) then
-		ClutchMode = true
-		--[[ The idea here was to hand the throttle setting over from the cruise controller to the RPM controller for clutch mode
-			but to bump it a little bit to overcome Stormworks' fuckiness in that the torque _increases_ at first, as you release
-			the clutch. But ub the end I just hardcoded it, and it seems to work now.
-		--]]
-		RPMPIDTable.I = 0.8
-		-- This is the appropriate I value for when clutch mode is sitting at just below the changeover speed.
-		ClchPIDTable.I = 0.7
 	end
 end
 
