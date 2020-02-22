@@ -92,11 +92,12 @@ function onTick()
 		setN(ClutchChannel, 0)
 		PID(RPMPIDTable, rpmSetPoint, rpmProcVar)
 		setN(SpdPIDTable.OutC, RPMPIDTable.out)
+		SpdPIDTable.I = MinThrottle
 	else
 		setN(ClutchChannel, 1)
 		PID(SpdPIDTable, spdSetPoint, spdProcVar)
 		if SpdPIDTable.out < MinThrottle then
-			SpdPIDTable.out = MinThrottle
+			SpdPIDTable.I = MinThrottle
 		end
 		setN(SpdPIDTable.OutC, SpdPIDTable.out)
 	end
