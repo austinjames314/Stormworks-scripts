@@ -1,4 +1,4 @@
--- Declare Constants
+--Declare Constants
 
 --Input channels
 SpeedChannel = 1
