@@ -43,3 +43,20 @@ function onTick()
 	
 	output.setNumber(EfficiencyChannel, Lp100km)
 end
+
+--near the top
+L_Timer = 0
+
+--in onTIck:
+L_Timer = L_Timer + 1
+
+--later on where you have the track code:
+if track == true then
+	--laser stuff, then:
+	if L_Timer > 60 then
+		L_Timer = 0
+		--Draw your 'L'
+	else if L_Time > 30 then
+		--Delete the 'L'
+	end
+end
