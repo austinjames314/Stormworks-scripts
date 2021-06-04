@@ -1,7 +1,6 @@
 -- Declare Constants
 Lock = true
 Unlock = false
-Front = 0
 
 --enumerated state 'constants'
 Closed = 0
@@ -19,6 +18,7 @@ LifterChannelOut = 2
 SliderChannelOut = 3
 PeriscopeChannelOut = 4
 PanControlChannelOut = 5
+CameraOverrideChannelOut = 6
 
 -- Global Variables
 --Input Channels
@@ -26,15 +26,30 @@ HatchToggleChannelIn = 1
 PanControlChannelIn = 2
 
 -- Initialised State variables
-HatchState = Retracting
-CameraPanAngle = Front
-CameraLock = true
+HatchState = Open
 
 HatchButtonPressed = false
 
 HatchTimeCounter = 0
 
+Initialised = false
+
 function onTick()
+	if not initialised then
+		HatchTimeCounter = HatchTimeCounter + 1
+		
+		if HatchTimeCounter > 30 then
+			HatchState = Retracting
+
+			output.setNumber(PeriscopeChannelOut, -1)
+			CameraOverride = true
+
+			HatchTimeCounter = 0
+		
+			initialised = true
+		end
+	end
+	
 	-- Read the inputs
 	hatchButton = input.getBool(HatchToggleChannelIn)
 	panRequest = input.getNumber(PanControlChannelIn)
@@ -57,7 +72,7 @@ function onTick()
 				HatchState = Retracting
 
 				output.setNumber(PeriscopeChannelOut, -1)
-				CameraLock = true
+				CameraOverride = true
 
 				HatchTimeCounter = 0
 			end
@@ -100,7 +115,7 @@ function onTick()
 			HatchState = Open
 			
 			output.setNumber(PeriscopeChannelOut, 0)
-			CameraLock = false
+			CameraOverride = false
 			
 			HatchTimeCounter = 0
 		end
@@ -139,13 +154,7 @@ function onTick()
 			output.setNumber(LifterChannelOut, 0)
 		end
 	end
-
-	if not CameraLock then
-		-- accept and act on pan inputs
-		CameraPanAngle = CameraPanAngle + panRequest
-	else
-		-- lock camera front
-		CameraPanAngle = Front
-	end
-	output.setNumber(PanControlChannelOut, CameraPanAngle)
+	
+	output.setBool(CameraOverrideChannelOut, CameraOverride)
+	output.setNumber(PanControlChannelOut, panRequest)
 end
