@@ -31,28 +31,44 @@ HatchState = Open
 HatchButtonPressed = false
 
 HatchTimeCounter = 0
+InitTimer = 0
 
 Initialised = false
 
+function startLowering()
+	HatchState = Retracting
+
+	output.setNumber(PeriscopeChannelOut, -1)
+	CameraOverride = true
+
+	HatchTimeCounter = 0
+end
+
+function startRaising()
+	HatchState = Raising
+
+	output.setNumber(LifterChannelOut, 1)
+	output.setBool(LockChannelOut, Unlock)
+
+	HatchTimeCounter = 0
+end
+
 function onTick()
 	if not initialised then
-		HatchTimeCounter = HatchTimeCounter + 1
-		
-		if HatchTimeCounter > 30 then
-			HatchState = Retracting
-
-			output.setNumber(PeriscopeChannelOut, -1)
-			CameraOverride = true
-
-			HatchTimeCounter = 0
-		
+		InitTimer = InitTimer + 1
+		if InitTimer == 30 then
+			startRaising()
+		elseif InitTimer == 300 then
+			startLowering()
 			initialised = true
 		end
 	end
 	
 	-- Read the inputs
-	hatchButton = input.getBool(HatchToggleChannelIn)
-	panRequest = input.getNumber(PanControlChannelIn)
+	if initialised then
+		hatchButton = input.getBool(HatchToggleChannelIn)
+		panRequest = input.getNumber(PanControlChannelIn)
+	end
 
 	-- Sets the state of the Hatch when the button is pressed.
 	-- If the button is pressed for the first tick since it was last pressed, then flip the state
@@ -62,19 +78,9 @@ function onTick()
 			HatchButtonPressed = true
 			--if you're here this is the first tick that the button's been pressed, this time around. Time to start the hatch moving.
 			if HatchState == Closed then
-				HatchState = Raising
-
-				output.setNumber(LifterChannelOut, 1)
-				output.setBool(LockChannelOut, Unlock)
-
-				HatchTimeCounter = 0
+				startRaising()
 			elseif HatchState == Open then
-				HatchState = Retracting
-
-				output.setNumber(PeriscopeChannelOut, -1)
-				CameraOverride = true
-
-				HatchTimeCounter = 0
+				startLowering()
 			end
 		end
 	else
