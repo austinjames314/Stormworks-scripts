@@ -1,8 +1,10 @@
 --Declare Constants
 
-local IdleRPM = 150
-local MinThrottle = 0.25
-local ClutchChannel = 17
+local IdleRPM = property.getNumber("Idle RPM")
+local MinThrottle = property.getNumber("Min Throttle")
+local SwitchGearLowRPM = property.getNumber("SwitchLow")
+local SwitchGearHighRPM = property.getNumber("SwitchHigh")
+local GearRatio = property.getNumber("Gear Ratio")
 
 --Input channels
 local SpdSetPointChannel = 1
@@ -50,6 +52,8 @@ RPMPIDTable.Pv0 = 0
 local EngineRunChannel = 25
 
 --Output channels
+local ClutchChannel = 17
+local LowGearChannel = 18
 
 -- To be connected to engine starters.
 local EngineStartChannel = 25
@@ -57,92 +61,112 @@ local EngineStartChannel = 25
 -- Global Variables that need intialising
 local Idle = true
 local Running = false
+local GearLow = true
 
 -- Global Variables that don't need initialising, plus variables that don't need to be global that are declared here, to help the minifier
 local spdSetPoint, spdProcVar, rpmSetPoint, rpmProcVar, error, error_s, iMax, iMin, smooth
 
 function onTick()
-	spdSetPoint = getN(SpdSetPointChannel)
-	spdProcVar = getN(SpdProcVarChannel)
-	Running = getB(EngineRunChannel)
-	rpmProcVar = getN(RPMProcVarChannel)
+	spdSetPoint = GetN(SpdSetPointChannel)
+	spdProcVar = GetN(SpdProcVarChannel)
+	Running = GetB(EngineRunChannel)
+	rpmProcVar = GetN(RPMProcVarChannel)
 
 	if not Running then
-		setN(SpdPIDTable.OutC, 0)
-		setN(ClutchChannel, 0)
+		SetN(SpdPIDTable.OutC, 0)
+		SetN(ClutchChannel, 0)
 		RPMPIDTable.I = 0
-		setB(EngineStartChannel, false)
+		SetB(EngineStartChannel, false)
 		return
 	elseif rpmProcVar < 120 then
-		setN(SpdPIDTable.OutC, 1)
-		setB(EngineStartChannel, true)
+		SetN(SpdPIDTable.OutC, 1)
+		SetB(EngineStartChannel, true)
 	else
-		setB(EngineStartChannel, false)
+		SetB(EngineStartChannel, false)
 	end
 
-	if spdSetPoint <= 0 then
-		Idle = true
+	if Idle then
+		if spdSetPoint > 0 then
+			Idle = false
+			SpdPIDTable.I = MinThrottle
+		end
 	else
-		Idle = false
+		if spdSetPoint <= 0 then
+			Idle = true
+			SpdPIDTable.I = MinThrottle
+		end
 	end
 
 	---- Section to control speed with throttle
 	if Idle then
 		rpmSetPoint = IdleRPM
-		setN(ClutchChannel, 0)
+		SetN(ClutchChannel, 0)
 		PID(RPMPIDTable, rpmSetPoint, rpmProcVar)
-		setN(SpdPIDTable.OutC, RPMPIDTable.out)
-		SpdPIDTable.I = MinThrottle
+		SetN(SpdPIDTable.OutC, RPMPIDTable.out)
 	else
-		setN(ClutchChannel, 1)
+		SetN(ClutchChannel, 1)
 		PID(SpdPIDTable, spdSetPoint, spdProcVar)
 		if SpdPIDTable.out < MinThrottle then
 			SpdPIDTable.I = MinThrottle
 		end
-		setN(SpdPIDTable.OutC, SpdPIDTable.out)
+		SetN(SpdPIDTable.OutC, SpdPIDTable.out)
 	end
+
+	---- Section to manage gear changes
+	if GearLow then
+		if rpmProcVar > SwitchGearHighRPM then
+			GearLow = false
+			SpdPIDTable.I = SpdPIDTable.I * (GearRatio * 0.62)
+		end
+	else
+		if rpmProcVar < SwitchGearLowRPM then
+			GearLow = true
+			SpdPIDTable.I = SpdPIDTable.I / (GearRatio * 0.62)
+		end
+	end
+	SetB(LowGearChannel, GearLow)
 end
 
 -- These system functions that get called a lot are put in these wrapper functions, so that the minifier can shrink the code used to call them.
-function getN(channelNumber)
+function GetN(channelNumber)
     return input.getNumber(channelNumber)
 end
 
-function getB(channelNumber)
+function GetB(channelNumber)
     return input.getBool(channelNumber)
 end
 
-function setN(channelNumber, value)
+function SetN(channelNumber, value)
     output.setNumber(channelNumber, value)
 end
 
-function setB(channelNumber, value)
+function SetB(channelNumber, value)
     output.setBool(channelNumber, value)
 end
 
 function PID(PIDStructTable, setPoint, processVariable)
 	--The gains are pulled in each tick. External ciruit logic either uses constants, or live variables from external inputs, to support live tuning.
-	Kp = getN(PIDStructTable.KpC)
-	Ki = getN(PIDStructTable.KiC)
-	Kd = getN(PIDStructTable.KdC)
-	iMax = getN(PIDStructTable.IMxC)
-	iMin = getN(PIDStructTable.IMnC)
-	smooth = getN(PIDStructTable.SmthC)
+	Kp = GetN(PIDStructTable.KpC)
+	Ki = GetN(PIDStructTable.KiC)
+	Kd = GetN(PIDStructTable.KdC)
+	iMax = GetN(PIDStructTable.IMxC)
+	iMin = GetN(PIDStructTable.IMnC)
+	smooth = GetN(PIDStructTable.SmthC)
 
 	error = setPoint - processVariable
 	
 	PIDStructTable.P = error * Kp
 	--debug
-	setN(PIDStructTable.PC, PIDStructTable.P)
+	SetN(PIDStructTable.PC, PIDStructTable.P)
 	
 	PIDStructTable.I = PIDStructTable.I + error * Ki
 	--debug
-	setN(PIDStructTable.IC, PIDStructTable.I)
+	SetN(PIDStructTable.IC, PIDStructTable.I)
 
 	--Limit I to prevent integral windup
 	PIDStructTable.I = math.min(iMax,math.max(iMin, PIDStructTable.I))
 	--debug
-	setN(PIDStructTable.IbC, PIDStructTable.I)
+	SetN(PIDStructTable.IbC, PIDStructTable.I)
 	
 	error = PIDStructTable.Pv0 - processVariable
 	PIDStructTable.Pv0 = processVariable
@@ -152,7 +176,7 @@ function PID(PIDStructTable, setPoint, processVariable)
 	--To calculate D next tick
 	PIDStructTable.Er0 = error_s
 	--debug
-	setN(PIDStructTable.DC, PIDStructTable.D)
+	SetN(PIDStructTable.DC, PIDStructTable.D)
 
 	PIDStructTable.out = PIDStructTable.P + PIDStructTable.I + PIDStructTable.D
 end

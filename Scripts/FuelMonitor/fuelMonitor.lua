@@ -56,7 +56,7 @@ if track == true then
 	if L_Timer > 60 then
 		L_Timer = 0
 		--Draw your 'L'
-	else if L_Time > 30 then
+	elseif L_Time > 30 then
 		--Delete the 'L'
 	end
 end

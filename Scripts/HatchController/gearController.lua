@@ -31,7 +31,7 @@ GearTimeCounter = 0
 
 function onTick()
 	-- Read the inputs
-	gearButton = input.getBool(GearToggleChannelIn)
+	local gearButton = input.getBool(GearToggleChannelIn)
 
 	-- Sets the state of the Gear when the button is pressed.
 	-- If the button is pressed for the first tick since it was last pressed, then flip the state
